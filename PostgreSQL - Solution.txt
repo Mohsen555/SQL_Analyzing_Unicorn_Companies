@@ -1,0 +1,80 @@
+-- First Solution
+
+-- Use a Common Table Expression (CTE) to identify the top performing industries in ...
+-- 2019, 2020, and 2021 based on volume of unicorns
+
+WITH full_table AS (
+    SELECT d.company_id, d.date_joined, d.year_founded, f.valuation, f.funding, f.select_investors, i.industry,
+			c.company, c.city, c.country, c.continent
+    FROM dates AS d
+    INNER JOIN fundings AS f ON d.company_id = f.company_id
+    INNER JOIN industries AS i ON f.company_id = i.company_id
+    INNER JOIN companies AS c ON i.company_id = c.company_id
+)
+, top_industries AS (
+    SELECT 
+        industry,
+        EXTRACT(year FROM date_joined) AS year,
+        COUNT(*) AS num_unicorns,
+        ROUND(AVG(valuation/1000000000), 2) AS average_valuation_billions
+    FROM full_table
+    GROUP BY industry, year
+    ORDER BY num_unicorns DESC
+)
+SELECT * FROM (
+    SELECT * FROM top_industries
+    WHERE year = 2021
+    LIMIT 3
+) AS subset_2021
+UNION ALL
+SELECT * FROM (
+    SELECT * FROM top_industries
+    WHERE year = 2020
+    LIMIT 3
+) AS subset_2020
+UNION ALL
+SELECT * FROM (
+    SELECT * FROM top_industries
+    WHERE year = 2019
+    LIMIT 3
+) AS subset_2019;
+
+-- Second Solution ----------------------------------------------------------------------
+
+WITH top_industries AS
+(
+    SELECT i.industry, 
+        COUNT(i.*)
+    FROM industries AS i
+    INNER JOIN dates AS d
+        ON i.company_id = d.company_id
+    WHERE EXTRACT(year FROM d.date_joined) in ('2019', '2020', '2021')
+    GROUP BY industry
+    ORDER BY count DESC
+    LIMIT 3
+),
+
+yearly_rankings AS 
+(
+    SELECT COUNT(i.*) AS num_unicorns,
+        i.industry,
+        EXTRACT(year FROM d.date_joined) AS year,
+        AVG(f.valuation) AS average_valuation
+    FROM industries AS i
+    INNER JOIN dates AS d
+        ON i.company_id = d.company_id
+    INNER JOIN fundings AS f
+        ON d.company_id = f.company_id
+    GROUP BY industry, year
+)
+
+SELECT industry,
+    year,
+    num_unicorns,
+    ROUND(AVG(average_valuation / 1000000000), 2) AS average_valuation_billions
+FROM yearly_rankings
+WHERE year in ('2019', '2020', '2021')
+    AND industry in (SELECT industry
+                    FROM top_industries)
+GROUP BY industry, num_unicorns, year
+ORDER BY year DESC, num_unicorns DESC;
